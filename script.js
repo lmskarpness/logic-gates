@@ -10,9 +10,13 @@ window.onload = function() {
 
     // Grid size for each cell
     const grid_size = 20;
+    drawGrid();
 
     // Gate representation (position, dimensions, etc.)
     const gates = [];
+
+    // Signal components (on, off)
+    const signals = [];
 
     // Dragging new gates (type and location)
     let dragged_gate_type = null;
@@ -24,9 +28,18 @@ window.onload = function() {
     let offset_x = 0
     let offset_y = 0
 
+    // Default gate configurations
+    const gate_configurations = {
+        AND: { inputs: 2, outputs: 1 },
+        OR: { inputs: 2, outputs: 1 },
+        NOT: { inputs: 1, outputs: 1 },
+        input: {inputs: 0, outputs: 1},
+        output: {inputs: 1, outputs: 0},
+    };
+
     // Dragging gates from toolbar functionality. Adds an event listener to each
     // gate that's available.
-    const gates_in_toolbar = document.querySelectorAll('.gate'); // Array of gate elements
+    const gates_in_toolbar = document.querySelectorAll('.gate, .signal'); // Array of gate elements
     gates_in_toolbar.forEach(gate => {
         gate.addEventListener('dragstart', (event) => {
             dragged_gate_type = gate.getAttribute('data-type'); // Store gate type
@@ -46,8 +59,23 @@ window.onload = function() {
     canvas.addEventListener('drop', (event) => {
         event.preventDefault();
         if (dragged_gate_type) {
-            // Add the gate to the gates array with the drop location
-            gates.push({ type: dragged_gate_type, x: snapToGrid(mouse_x - 30), y: snapToGrid(mouse_y - 20), width: 60, height: 40 });
+            const config = gate_configurations[dragged_gate_type];
+
+            if (config) {
+                // OPTIMIZATION: Could width/height be calculated when the component is saved
+                // and be part of the configuration?
+                let width = 40;
+                let height = Math.max(config.inputs, config.outputs) * 40;
+                gates.push({
+                    type: dragged_gate_type,
+                    x: snapToGrid(mouse_x - width / 2),
+                    y: snapToGrid(mouse_y - height / 2),
+                    width: width,
+                    height: height,
+                    inputs: config.inputs,
+                    outputs: config.outputs
+                });
+            }
             dragged_gate_type = null; // Reset after drop
             drawGates();
         }
@@ -96,17 +124,70 @@ window.onload = function() {
     // Simple render loop to draw gates on the canvas
     function drawGates() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawGrid();
         gates.forEach(gate => {
             drawGate(gate);
         });
     }
 
     function drawGate(gate) {
-        ctx.fillStyle = '#C94E4E';
-        ctx.fillRect(gate.x, gate.y, gate.width, gate.height);
-        ctx.strokeRect(gate.x, gate.y, gate.width, gate.height);
+        if (gate.type === 'input') {
+            // Draw input as a circle
+            ctx.fillStyle = '#323232';
+            ctx.beginPath();
+            ctx.arc(gate.x + gate.width / 2, gate.y + gate.height / 2, gate.width / 2, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.stroke();
+        } else if (gate.type === 'output') {
+            // Draw output as a square
+            ctx.fillStyle = '#323232';
+            ctx.fillRect(gate.x, gate.y, gate.width, gate.height);
+            ctx.strokeRect(gate.x, gate.y, gate.width, gate.height);
+        } else {
+            // Terminal sizes
+            const terminal_width = 10;
+            const terminal_height = 20;
 
-        ctx.fillStyle = 'black';
-        ctx.fillText(gate.type, gate.x + 5, gate.y + 20);
+            // Component
+            ctx.fillStyle = '#C94E4E';
+            ctx.fillRect(gate.x, gate.y, gate.width, gate.height);
+            ctx.strokeRect(gate.x, gate.y, gate.width, gate.height);
+
+            // Text
+            ctx.fillStyle = 'black';
+            ctx.fillText(gate.type, gate.x + 5, gate.y + 20);
+
+            // Draw input rectangles
+            const pitch = grid_size * 2; // spacing between terminals
+            for (let i = 0; i < gate.inputs; i++) {
+                const input_x = gate.x - terminal_width;
+                const input_y = gate.y + 10 + i * pitch;
+                ctx.fillStyle = '#888';
+                ctx.fillRect(input_x, input_y, terminal_width, terminal_height);
+                ctx.strokeRect(input_x, input_y, terminal_width, terminal_height);
+            }
+
+            // Draw output rectangles
+            for (let i = 0; i < gate.outputs; i++) {
+                const output_x = gate.x + gate.width;
+                const output_y = gate.y + 10 + i * pitch;
+                ctx.fillStyle = '#888';
+                ctx.fillRect(output_x, output_y, terminal_width, terminal_height);
+                ctx.strokeRect(output_x, output_y, terminal_width, terminal_height);
+            }
+        }
+    }
+
+    function drawGrid() {
+        ctx.fillStyle = '#323232'; // Color of the grid dots
+
+        // Draw grid dots
+        for (let x = 0; x <= canvas.width; x += grid_size) {
+            for (let y = 0; y <= canvas.height; y += grid_size) {
+                ctx.beginPath();
+                ctx.arc(x, y, 2, 0, 2 * Math.PI); // Draw a dot at each grid intersection
+                ctx.fill();
+            }
+        }
     }
 };

@@ -54,3 +54,28 @@ canvas {
 #toolbar::-webkit-scrollbar-thumb:hover {
     background: #555;
 }
+
+.signal {
+    background-color: #090909;
+    color: rgb(210, 210, 210);
+    padding: 10px;
+    margin: 0px 10px;
+    border-radius: 5px;
+    text-align: center;
+    white-space: nowrap;
+    cursor: grab;
+    flex-shrink: 0;
+}
+
+.signal[data-type="input"] {
+    border-radius: 50%; /* Makes the input signal a circle */
+    width: 10px;
+    height: 10px;
+    line-height: 10px; /* Vertically center text */
+}
+
+.signal[data-type="output"] {
+    width: 10px;
+    height: 10px;
+    line-height: 10px; /* Vertically center text */
+}
