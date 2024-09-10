@@ -104,8 +104,8 @@ function addGateToCanvas(type, x, y) {
             text: type,
             fontSize: 14,
             fill: 'black',
-            x: 105,
-            y: 110,
+            x: x,
+            y: y,
         });
         layer.add(label);
     }
