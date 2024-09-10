@@ -1,193 +1,122 @@
-window.onload = function() {
-    const canvas = document.getElementById('canvas');
-    const ctx = canvas.getContext('2d');
-    canvas.width = 856;
-    canvas.height = 480;
+// Preprocessing CSS: makes the toolbar the same width as the container.
+window.addEventListener('load', () => {
+    const container = document.getElementById('container');
+    const toolbar = document.getElementById('toolbar');
 
-    // Setting sizing for CSS
-    const app = document.getElementById('app');
-    app.style.maxWidth = canvas.width + 'px';
+    // Set toolbar width to match container width
+    toolbar.style.width = container.offsetWidth + 'px';
+});
 
-    // Grid size for each cell
-    const grid_size = 20;
-    drawGrid();
+const gridSize = 20;
 
-    // Gate representation (position, dimensions, etc.)
-    const gates = [];
+// Stage setup
+const stage = new Konva.Stage({
+    container: 'container',
+    width: 860,
+    height: 480,
+});
 
-    // Signal components (on, off)
-    const signals = [];
+// Layer for drawing
+const layer = new Konva.Layer();
+stage.add(layer);
 
-    // Dragging new gates (type and location)
-    let dragged_gate_type = null;
-    let mouse_x = 0;
-    let mouse_y = 0;
+let dragged_gate_type = null;
 
-    // Dragging gates already placed.
-    let selected_gate = null;
-    let offset_x = 0
-    let offset_y = 0
+// Snap a value to the nearest grid point
+function snapToGrid(value, type) {
+    return Math.round(value / gridSize) * gridSize - (type === "output" ? gridSize / 2 : 0);
+}
 
-    // Default gate configurations
-    const gate_configurations = {
-        AND: { inputs: 2, outputs: 1 },
-        OR: { inputs: 2, outputs: 1 },
-        NOT: { inputs: 1, outputs: 1 },
-        input: {inputs: 0, outputs: 1},
-        output: {inputs: 1, outputs: 0},
-    };
+// Draw grid on the canvas
+function drawGrid() {
+    for (let x = 0; x <= stage.width(); x += gridSize) {
+        for (let y = 0; y <= stage.height(); y += gridSize) {
+            const dot = new Konva.Circle({
+                x: x,
+                y: y,
+                radius: 1,
+                fill: '#323232',
+            });
+            layer.add(dot);
+        }
+    }
+}
 
-    // Dragging gates from toolbar functionality. Adds an event listener to each
-    // gate that's available.
-    const gates_in_toolbar = document.querySelectorAll('.gate, .signal'); // Array of gate elements
-    gates_in_toolbar.forEach(gate => {
-        gate.addEventListener('dragstart', (event) => {
-            dragged_gate_type = gate.getAttribute('data-type'); // Store gate type
+drawGrid(); // Draw initial grid
+
+// Dragging and dropping gates
+document.querySelectorAll('.gate, .signal').forEach(gate => {
+    gate.addEventListener('dragstart', (event) => {
+        dragged_gate_type = gate.getAttribute('data-type');
+    });
+});
+
+let con = stage.container();
+con.addEventListener('dragover', (event) => {
+    event.preventDefault();
+});
+
+con.addEventListener('drop', (event) => {
+    event.preventDefault();
+    stage.setPointersPositions(event);
+    
+    let mouse_pos = stage.getPointerPosition();
+
+    addGateToCanvas(dragged_gate_type, snapToGrid(mouse_pos.x, dragged_gate_type), snapToGrid(mouse_pos.y, dragged_gate_type));
+
+    dragged_gate_type = null;
+});
+
+
+function addGateToCanvas(type, x, y) {
+    let gate;
+
+    // Gate configuration (rect for gates, circle for input)
+    if (type === 'input') {
+        gate = new Konva.Circle({
+            name: type,
+            x: x,
+            y: y,
+            radius: 10,
+            fill: '#323232',
+            draggable: true,
+        });
+    } else if (type === 'output') {
+        gate = new Konva.Rect({
+            x: x,
+            y: y,
+            width: 20,
+            height: 20,
+            fill: '#323232',
+            draggable: true,
+        });
+    } else {
+        gate = new Konva.Rect({
+            x: x,
+            y: y,
+            width: 60,
+            height: 40,
+            fill: '#C94E4E',
+            draggable: true,
+        });
+        
+        const label = new Konva.Text({
+            text: type,
+            fontSize: 14,
+            fill: 'black',
+            x: 105,
+            y: 110,
+        });
+        layer.add(label);
+    }
+
+    gate.on('dragmove', () => {
+        gate.position({
+            x: snapToGrid(gate.x(), type),
+            y: snapToGrid(gate.y(), type)
         });
     });
 
-    // Give the canvas an event listener for dragover event.
-    canvas.addEventListener('dragover', (event) => {
-        event.preventDefault();
-        const rect = canvas.getBoundingClientRect();
-        mouse_x = event.clientX - rect.left;
-        mouse_y = event.clientY - rect.top;
-    });
-
-    // Event listener for dropping gate onto canvas. Pushes gate type to list of current gates,
-    // then redraws the gates.
-    canvas.addEventListener('drop', (event) => {
-        event.preventDefault();
-        if (dragged_gate_type) {
-            const config = gate_configurations[dragged_gate_type];
-
-            if (config) {
-                // OPTIMIZATION: Could width/height be calculated when the component is saved
-                // and be part of the configuration?
-                let width = 40;
-                let height = Math.max(config.inputs, config.outputs) * 40;
-                gates.push({
-                    type: dragged_gate_type,
-                    x: snapToGrid(mouse_x - width / 2),
-                    y: snapToGrid(mouse_y - height / 2),
-                    width: width,
-                    height: height,
-                    inputs: config.inputs,
-                    outputs: config.outputs
-                });
-            }
-            dragged_gate_type = null; // Reset after drop
-            drawGates();
-        }
-    });
-
-    // Mouse down on a placed gate to drag it
-    canvas.addEventListener('mousedown', (event) => {
-        const rect = canvas.getBoundingClientRect();
-        mouse_x = event.clientX - rect.left;
-        mouse_y = event.clientY - rect.top;
-
-        // Finds what gate is within the bounds of that which we placed
-        selected_gate = gates.find(gate => mouse_x >= gate.x && mouse_x <= gate.x + gate.width && mouse_y >= gate.y && mouse_y <= gate.y + gate.height);
-        if (selected_gate) {
-            // Calculate offset between gate and current mouse position.
-            offset_x = mouse_x - selected_gate.x;
-            offset_y = mouse_y - selected_gate.y;
-        }
-    });
-
-    canvas.addEventListener('mousemove', (event) => {
-        if (selected_gate) {
-            const rect = canvas.getBoundingClientRect();
-            mouse_x = event.clientX - rect.left;
-            mouse_y = event.clientY - rect.top;
-
-            // Snap gates position to grid
-            selected_gate.x = snapToGrid(mouse_x - offset_x);
-            selected_gate.y = snapToGrid(mouse_y - offset_y);
-
-            drawGates();
-        }
-    });
-
-    // Mouse up to drop the gate
-    canvas.addEventListener('mouseup', () => {
-        selected_gate = null; // Clear selection after dragging
-    });
-
-
-    // Snap a value to the nearest grid line
-    function snapToGrid(value) {
-        return Math.round(value / grid_size) * grid_size;
-    }
-
-    // Simple render loop to draw gates on the canvas
-    function drawGates() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        drawGrid();
-        gates.forEach(gate => {
-            drawGate(gate);
-        });
-    }
-
-    function drawGate(gate) {
-        if (gate.type === 'input') {
-            // Draw input as a circle
-            ctx.fillStyle = '#323232';
-            ctx.beginPath();
-            ctx.arc(gate.x + gate.width / 2, gate.y + gate.height / 2, gate.width / 2, 0, 2 * Math.PI);
-            ctx.fill();
-            ctx.stroke();
-        } else if (gate.type === 'output') {
-            // Draw output as a square
-            ctx.fillStyle = '#323232';
-            ctx.fillRect(gate.x, gate.y, gate.width, gate.height);
-            ctx.strokeRect(gate.x, gate.y, gate.width, gate.height);
-        } else {
-            // Terminal sizes
-            const terminal_width = 10;
-            const terminal_height = 20;
-
-            // Component
-            ctx.fillStyle = '#C94E4E';
-            ctx.fillRect(gate.x, gate.y, gate.width, gate.height);
-            ctx.strokeRect(gate.x, gate.y, gate.width, gate.height);
-
-            // Text
-            ctx.fillStyle = 'black';
-            ctx.fillText(gate.type, gate.x + 5, gate.y + 20);
-
-            // Draw input rectangles
-            const pitch = grid_size * 2; // spacing between terminals
-            for (let i = 0; i < gate.inputs; i++) {
-                const input_x = gate.x - terminal_width;
-                const input_y = gate.y + 10 + i * pitch;
-                ctx.fillStyle = '#888';
-                ctx.fillRect(input_x, input_y, terminal_width, terminal_height);
-                ctx.strokeRect(input_x, input_y, terminal_width, terminal_height);
-            }
-
-            // Draw output rectangles
-            for (let i = 0; i < gate.outputs; i++) {
-                const output_x = gate.x + gate.width;
-                const output_y = gate.y + 10 + i * pitch;
-                ctx.fillStyle = '#888';
-                ctx.fillRect(output_x, output_y, terminal_width, terminal_height);
-                ctx.strokeRect(output_x, output_y, terminal_width, terminal_height);
-            }
-        }
-    }
-
-    function drawGrid() {
-        ctx.fillStyle = '#323232'; // Color of the grid dots
-
-        // Draw grid dots
-        for (let x = 0; x <= canvas.width; x += grid_size) {
-            for (let y = 0; y <= canvas.height; y += grid_size) {
-                ctx.beginPath();
-                ctx.arc(x, y, 2, 0, 2 * Math.PI); // Draw a dot at each grid intersection
-                ctx.fill();
-            }
-        }
-    }
-};
+    layer.add(gate);
+    layer.draw();
+}
